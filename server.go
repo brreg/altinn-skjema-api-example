@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 )
 
 // Middleware to handle CORS and check the access token
@@ -191,14 +190,6 @@ func handleLpidRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Set up logging to output to both stdout and a file
-	logFile, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	defer logFile.Close()
-
-	// log.SetOutput(logFile)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("Starting server")
 
