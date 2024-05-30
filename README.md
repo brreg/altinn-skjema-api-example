@@ -5,6 +5,8 @@ Cross Origin requests are allowed here.
 
 To find the relevant endpoints for you skjema, simply look at the network traffick tool in your browser when you use a Altinn skjema from the browser. We can use the same API as the browser does to fetch data
 
+This application is the backend of a complete example on how a website can use Altinn skjema via its API endpoints. The frontend application is located [here](https://github.com/brreg/idporten-vite-spa-example)
+
 ### How it works
 1. The user calls `/company` to get the available companies that can use this skjema, the request must provide a valid ID-porten access-token in the header.
 2. ID-porten access-token is exchanged for a Altinn platform token at `https://platform.tt02.altinn.no/authentication/api/v1/exchange/id-porten`.
