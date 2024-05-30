@@ -3,14 +3,15 @@ package main
 import (
 	"errors"
 	"io"
-	"log"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Middleware to handle CORS and check the access token
 func middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Middleware: Received request")
+		log.Debug("Middleware: Received request")
 
 		// Handle CORS
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -19,7 +20,7 @@ func middleware(next http.Handler) http.Handler {
 
 		// Handle preflight request
 		if r.Method == http.MethodOptions {
-			log.Println("Middleware: CORS error")
+			log.Warn("Middleware: CORS error")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -27,12 +28,12 @@ func middleware(next http.Handler) http.Handler {
 		// Check for access token
 		token := r.Header.Get("Authorization")
 		if token == "" {
-			log.Println("Middleware: Missing Authorization token")
+			log.Warn("Middleware: Missing Authorization token")
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 
-		log.Println("Middleware: Authorization token found")
+		log.Debug("Middleware: Authorization token found")
 
 		// Call the next handler
 		next.ServeHTTP(w, r)
@@ -43,7 +44,7 @@ func getAltinnPlatformToken(idPortenToken string) (string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://platform.tt02.altinn.no/authentication/api/v1/exchange/id-porten", nil)
 	if err != nil {
-		log.Printf("AltinnPlatformToken: Error creating new request: %v\n", err)
+		log.Warn("AltinnPlatformToken: Error creating new request: ", err)
 		return "", errors.New("error creating Altinn exchange API request")
 	}
 
@@ -52,12 +53,12 @@ func getAltinnPlatformToken(idPortenToken string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("AltinnPlatformToken: Error calling Altinn exchange API: %v\n", err)
+		log.Warn("AltinnPlatformToken: Error calling Altinn exchange API: ", err)
 		return "", errors.New("error calling Altinn exchange API")
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Println("AltinnPlatformToken: Altinn exchange API responded with " + resp.Status)
+		log.Warn("AltinnPlatformToken: Altinn exchange API responded with " + resp.Status)
 		return "", errors.New("altinn exchange API responded with " + resp.Status)
 	}
 
@@ -65,26 +66,26 @@ func getAltinnPlatformToken(idPortenToken string) (string, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("AltinnPlatformToken: Error parsing response body: %v\n", err)
+		log.Warn("AltinnPlatformToken: Error parsing response body: ", err)
 		return "", errors.New("failed to parse response body from Altinn exchange API")
 	}
 
 	newToken := "Bearer " + string(body)
-	log.Printf("AltinnPlatformToken: Altinn Plattform Token: %s\n", newToken)
+	log.Debug("AltinnPlatformToken: Altinn Plattform Token: ", newToken)
 	return newToken, nil
 }
 
 // Handler function to make the GET request to the external API
 func handleCompanyRequest(w http.ResponseWriter, r *http.Request) {
-	log.Println("CompanyHandler: Received request to handle external API call")
+	log.Debug("CompanyHandler: Received request to handle external API call")
 
 	// Extract the access token from the header
 	idPortenToken := r.Header.Get("Authorization")
-	log.Printf("CompanyHandler: Extracted token: %s\n", idPortenToken)
+	log.Debug("CompanyHandler: Extracted token: ", idPortenToken)
 
 	altinnPlattformToken, err := getAltinnPlatformToken(idPortenToken)
 	if err != nil {
-		log.Printf("CompanyHandler: Error authentication to Altinn API: %v\n", err)
+		log.Warn("CompanyHandler: Error authentication to Altinn API: ", err)
 		http.Error(w, "Error authentication to Altinn API", http.StatusInternalServerError)
 		return
 	}
@@ -93,7 +94,7 @@ func handleCompanyRequest(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://brg.apps.tt02.altinn.no/brg/lpid-wallet-2024/api/v1/parties?allowedtoinstantiatefilter=true", nil)
 	if err != nil {
-		log.Printf("CompanyHandler: Error creating new request: %v\n", err)
+		log.Warn("CompanyHandler: Error creating new request: ", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -101,11 +102,11 @@ func handleCompanyRequest(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Authorization", altinnPlattformToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	log.Println("CompanyHandler: Making request to external API")
+	log.Debug("CompanyHandler: Making request to external API")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("CompanyHandler: Error making request to external API: %v\n", err)
+		log.Warn("CompanyHandler: Error making request to external API: ", err)
 		http.Error(w, "Failed to make request to external API", http.StatusInternalServerError)
 		return
 	}
@@ -113,36 +114,36 @@ func handleCompanyRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
-	log.Println("CompanyHandler: response body from Altinn allowed parties", string(body))
+	log.Debug("CompanyHandler: response body from Altinn allowed parties", string(body))
 	if err != nil {
-		log.Printf("CompanyHandler: Error reading response from external API: %v\n", err)
+		log.Warn("CompanyHandler: Error reading response from external API: ", err)
 		http.Error(w, "Failed to read response from external API", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("CompanyHandler: Received response from external API with status: %s\n", resp.Status)
+	log.Info("CompanyHandler: Received response from external API with status: ", resp.Status)
 
 	// Write the response back to the user
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
-	log.Println("CompanyHandler: Response sent back to the client")
+	log.Debug("CompanyHandler: Response sent back to the client")
 }
 
 // Handler function to make the GET request to the external API
 func handleLpidRequest(w http.ResponseWriter, r *http.Request) {
-	log.Println("LpidHandler: Received request to handle external API call")
+	log.Debug("LpidHandler: Received request to handle external API call")
 
 	// Extract the access token from the header
 	idPortenToken := r.Header.Get("Authorization")
 	partyId := r.Header.Get("Party")
-	log.Printf("LpidHandler: Extracted Auth token: %s\n", idPortenToken)
-	log.Printf("LpidHandler: Extracted PartyID: %s\n", partyId)
+	log.Debug("LpidHandler: Extracted Auth token: ", idPortenToken)
+	log.Debug("LpidHandler: Extracted PartyID: ", partyId)
 
 	altinnPlattformToken, err := getAltinnPlatformToken(idPortenToken)
 	if err != nil {
-		log.Printf("LpidHandler: Error authentication to Altinn API: %v\n", err)
+		log.Warn("LpidHandler: Error authentication to Altinn API: ", err)
 		http.Error(w, "Error authentication to Altinn API", http.StatusInternalServerError)
 		return
 	}
@@ -151,7 +152,7 @@ func handleLpidRequest(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://brg.apps.tt02.altinn.no/brg/lpid-wallet-2024/v1/data?dataType=model&includeRowId=true&language=nb", nil)
 	if err != nil {
-		log.Printf("LpidHandler: Error creating new request: %v\n", err)
+		log.Warn("LpidHandler: Error creating new request: ", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -160,11 +161,11 @@ func handleLpidRequest(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Party", partyId)
 	req.Header.Set("Content-Type", "application/json")
 
-	log.Println("LpidHandler: Making request to external API")
+	log.Debug("LpidHandler: Making request to external API")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("LpidHandler: Error making request to external API: %v\n", err)
+		log.Warn("LpidHandler: Error making request to external API: ", err)
 		http.Error(w, "Failed to make request to external API", http.StatusInternalServerError)
 		return
 	}
@@ -172,26 +173,26 @@ func handleLpidRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
-	log.Println("LpidHandler: response body from Altinn allowed parties", string(body))
+	log.Debug("LpidHandler: response body from Altinn allowed parties", string(body))
 	if err != nil {
-		log.Printf("LpidHandler: Error reading response from external API: %v\n", err)
+		log.Warn("LpidHandler: Error reading response from external API: ", err)
 		http.Error(w, "Failed to read response from external API", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("LpidHandler: Received response from external API with status: %s\n", resp.Status)
+	log.Info("LpidHandler: Received response from external API with status: ", resp.Status)
 
 	// Write the response back to the user
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
-	log.Println("LpidHandler: Response sent back to the client")
+	log.Debug("LpidHandler: Response sent back to the client")
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Println("Starting server")
+	log.SetLevel(log.InfoLevel)
+	log.Info("Starting server")
 
 	// Create a new HTTP server
 	mux := http.NewServeMux()
@@ -199,8 +200,8 @@ func main() {
 	mux.Handle("/api/v1/lpid", middleware(http.HandlerFunc(handleLpidRequest)))
 
 	// Start the server on port 8080
-	log.Println("Server listening on port 8080")
+	log.Info("Server listening on port 8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatalf("Could not start server: %s\n", err)
+		log.Error("Could not start server: ", err)
 	}
 }
