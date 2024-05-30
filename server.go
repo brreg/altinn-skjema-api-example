@@ -20,7 +20,6 @@ func middleware(next http.Handler) http.Handler {
 
 		// Handle preflight request
 		if r.Method == http.MethodOptions {
-			log.Warn("Middleware: CORS error")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -69,6 +68,8 @@ func getAltinnPlatformToken(idPortenToken string) (string, error) {
 		log.Warn("AltinnPlatformToken: Error parsing response body: ", err)
 		return "", errors.New("failed to parse response body from Altinn exchange API")
 	}
+
+	log.Info("AltinnPlatformToken: Token exchange response with status: ", resp.Status)
 
 	newToken := "Bearer " + string(body)
 	log.Debug("AltinnPlatformToken: Altinn Plattform Token: ", newToken)
